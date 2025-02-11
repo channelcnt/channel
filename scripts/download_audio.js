@@ -2,25 +2,31 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
+const crypto = require('crypto');
 
-const MP3_API = "https://backendmix.vercel.app/mp3";
+const DOWNLOAD_API = "https://backendmix-emergeny.vercel.app/d";
 const CHANNEL_API = "https://backendmix-emergeny.vercel.app/list";
 const DOWNLOAD_DIR = path.join(__dirname, "..", "avas");
 const DOWNLOADS_JSON = path.join(__dirname, "..", "downloads.json");
 const MAX_RETRIES = 3;
-const CHANNEL_ID = "UCVIq229U5A54UVzHQJqZCPQ"; // 🔥 Hardcoded Channel ID
+const CHANNEL_ID = "UCVIq229U5A54UVzHQJqZCPQ";
 const FILE_BASE_URL = "https://channel-khaki.vercel.app/avas/";
+const RAPIDAPI_USERNAME = "BANK OF APIs";
+
+// Generate MD5 hash of RapidAPI username
+const USERNAME_HASH = crypto.createHash('md5').update(RAPIDAPI_USERNAME).digest('hex');
 
 // Ensure the download directory exists
 if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-// Load existing downloads data and update old file paths
+// Load existing downloads data
 let downloadsData = {};
 if (fs.existsSync(DOWNLOADS_JSON)) {
     try {
         downloadsData = JSON.parse(fs.readFileSync(DOWNLOADS_JSON, "utf-8"));
+        // Update old file paths
         for (const videoId in downloadsData) {
             if (!downloadsData[videoId].filePath.startsWith(FILE_BASE_URL)) {
                 downloadsData[videoId].filePath = `${FILE_BASE_URL}${videoId}.mp3`;
@@ -33,6 +39,27 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
     }
 }
 
+const downloadFile = async (url, filePath) => {
+    const writer = fs.createWriteStream(filePath);
+    const response = await axios({
+        url,
+        method: 'GET',
+        responseType: 'stream',
+        timeout: 30000,
+        headers: {
+            'User-Agent': `Mozilla/5.0 ${RAPIDAPI_USERNAME}`,
+            'X-RUN': USERNAME_HASH
+        }
+    });
+
+    response.data.pipe(writer);
+
+    return new Promise((resolve, reject) => {
+        writer.on('finish', resolve);
+        writer.on('error', reject);
+    });
+};
+
 (async () => {
     try {
         console.log(`🔍 Fetching videos for channel ID: ${CHANNEL_ID}...`);
@@ -44,7 +71,7 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
         }
 
         const videoIds = response.data.videos;
-        console.log(`📹 mujhe ${videoIds.length} videos mili h dekhta hu kitni bachi h`);
+        console.log(`📹 Found ${videoIds.length} videos to process`);
 
         for (const videoId of videoIds) {
             const filename = `${videoId}.mp3`;
@@ -53,72 +80,53 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
 
             // Skip if already downloaded and valid
             if (downloadsData[videoId] && fs.existsSync(filePath) && downloadsData[videoId].size > 0) {
-                console.log(`⏭️ isko ${videoId}, Skip kar rha hu kyoki sahi h`);
+                console.log(`⏭️ Skipping ${videoId}, already downloaded`);
                 continue;
             }
 
-            console.log(`🎵 kisa download kar rha hu samjha kya ${videoId}...`);
+            console.log(`🎵 Processing download for ${videoId}...`);
 
             let success = false;
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
                 try {
                     console.log(`🔄 Attempt ${attempt}/${MAX_RETRIES}...`);
 
-                    // Get the download URL and filename from the MP3 API
-                    const downloadResponse = await axios.get(`${MP3_API}/${videoId}`);
-                    const { url, filename: videoTitle } = downloadResponse.data;
+                    // Get download information from new API
+                    const downloadResponse = await axios.get(`${DOWNLOAD_API}/${videoId}`);
+                    const { link, title, filesize, status } = downloadResponse.data;
 
-                    if (!url) {
-                        throw new Error("phuck ho ga guru");
+                    if (status !== "ok" || !link) {
+                        throw new Error("Invalid download response");
                     }
 
-                    // Clean up filename to use as title (remove .mp3 extension if present)
-                    const title = videoTitle 
-                        ? videoTitle.replace(/\.mp3$/, '').trim() 
-                        : `Video ${videoId}`;
+                    // Download the file with secure headers
+                    await downloadFile(link, filePath);
 
-                    // Download the audio file
-                    const writer = fs.createWriteStream(filePath);
-                    const audioResponse = await axios({
-                        url,
-                        method: "GET",
-                        responseType: "stream",
-                        timeout: 30000
-                    });
-
-                    audioResponse.data.pipe(writer);
-
-                    await new Promise((resolve, reject) => {
-                        writer.on("finish", resolve);
-                        writer.on("error", reject);
-                    });
-
-                    // Get file size
-                    const fileSize = fs.statSync(filePath).size;
-
-                    if (fileSize === 0) {
+                    // Verify file size
+                    const actualFileSize = fs.statSync(filePath).size;
+                    if (actualFileSize === 0) {
                         throw new Error("Downloaded file size is 0 bytes");
                     }
 
-                    console.log(`✅ kaam ho gya guru ${filePath} (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
-                    console.log(`📝 Title from filename: ${title}`);
+                    console.log(`✅ Download completed: ${filePath} (${(actualFileSize / 1024 / 1024).toFixed(2)} MB)`);
+                    console.log(`📝 Title: ${title}`);
 
-                    // Save to downloads.json with the filename as title
+                    // Save to downloads.json
                     downloadsData[videoId] = {
                         title: title,
                         id: videoId,
                         filePath: fileUrl,
-                        size: fileSize
+                        size: actualFileSize
                     };
 
                     fs.writeFileSync(DOWNLOADS_JSON, JSON.stringify(downloadsData, null, 2));
 
-                    // Commit the file immediately
+                    // Commit the file
                     commitFile(filePath, videoId, title);
                     success = true;
                     break;
                 } catch (err) {
-                    console.error(`⚠️ phuck ho gya guru ${videoId}: ${err.message}`);
+                    console.error(`⚠️ Error downloading ${videoId}: ${err.message}`);
                     if (attempt === MAX_RETRIES) {
                         console.error(`❌ Failed after ${MAX_RETRIES} attempts, skipping.`);
                     }
