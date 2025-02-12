@@ -14,15 +14,12 @@ const CHANNEL_ID = "UCVIq229U5A54UVzHQJqZCPQ";
 const FILE_BASE_URL = "https://channel-khaki.vercel.app/avas/";
 const RAPIDAPI_USERNAME = "BANK OF APIs";
 
-// Calculate MD5 hash of RapidAPI username
 const rapidApiMd5 = crypto.createHash('md5').update(RAPIDAPI_USERNAME).digest('hex');
 
-// Ensure the download directory exists
 if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-// Load existing downloads data and update old file paths
 let downloadsData = {};
 if (fs.existsSync(DOWNLOADS_JSON)) {
     try {
@@ -49,16 +46,14 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
             process.exit(1);
         }
 
-        const videoList = response.data.videos;
-        console.log(`📹 Found ${videoList.length} videos, processing...`);
+        const videoIds = response.data.videos;
+        console.log(`📹 Found ${videoIds.length} videos. Checking downloads...`);
 
-        for (const video of videoList) {
-            const videoId = video.id;
+        for (const videoId of videoIds) {
             const filename = `${videoId}.mp3`;
             const filePath = path.join(DOWNLOAD_DIR, filename);
             const fileUrl = `${FILE_BASE_URL}${filename}`;
 
-            // Skip if already downloaded and valid
             if (downloadsData[videoId] && fs.existsSync(filePath) && downloadsData[videoId].size > 0) {
                 console.log(`⏭️ Skipping ${videoId}, already downloaded.`);
                 continue;
@@ -79,7 +74,6 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                     }
 
                     const title = videoTitle ? videoTitle.trim() : `Video ${videoId}`;
-
                     const writer = fs.createWriteStream(filePath);
                     const audioResponse = await axios({
                         url,
@@ -104,7 +98,7 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                         throw new Error("Downloaded file size is incorrect or zero");
                     }
 
-                    console.log(`✅ Downloaded ${filePath} (${(downloadedSize / 1024 / 1024).toFixed(2)} MB)`);
+                    console.log(`✅ Download successful: ${filePath} (${(downloadedSize / 1024 / 1024).toFixed(2)} MB)`);
                     console.log(`📝 Title: ${title}`);
 
                     downloadsData[videoId] = {
@@ -115,28 +109,27 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                     };
 
                     fs.writeFileSync(DOWNLOADS_JSON, JSON.stringify(downloadsData, null, 2));
-
                     commitFile(filePath, videoId, title);
                     success = true;
                     break;
                 } catch (err) {
-                    console.error(`⚠️ Error downloading ${videoId}: ${err.message}`);
+                    console.error(`⚠️ Download failed for ${videoId}: ${err.message}`);
                     if (fs.existsSync(filePath)) {
                         fs.unlinkSync(filePath);
                     }
                     if (attempt === MAX_RETRIES) {
-                        console.error(`❌ Skipping after ${MAX_RETRIES} failed attempts.`);
+                        console.error(`❌ Failed after ${MAX_RETRIES} attempts. Skipping ${videoId}.`);
                     }
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 }
             }
 
             if (!success) {
-                console.error(`🚨 Skipped: ${videoId} due to repeated errors.`);
+                console.error(`🚨 Download permanently failed for: ${videoId}`);
             }
         }
     } catch (error) {
-        console.error("❌ Error:", error.message);
+        console.error("❌ Error fetching channel videos:", error.message);
     }
 })();
 
