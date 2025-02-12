@@ -73,6 +73,8 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                         throw new Error("No download URL available");
                     }
 
+                    console.log(`📥 Received download URL: ${url}`);
+
                     const title = videoTitle ? videoTitle.trim() : `Video ${videoId}`;
                     const writer = fs.createWriteStream(filePath);
                     const audioResponse = await axios({
