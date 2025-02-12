@@ -11,19 +11,19 @@ const MAX_RETRIES = 3;
 const CHANNEL_ID = "UCVIq229U5A54UVzHQJqZCPQ"; // 🔥 Hardcoded Channel ID
 const FILE_BASE_URL = "https://channel-khaki.vercel.app/avas/";
 
-// Ensure download directory exists
+// Ensure the download directory exists
 if (!fs.existsSync(DOWNLOAD_DIR)) {
     fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 }
 
-// Load existing downloads data
+// Load existing downloads data and update old file paths
 let downloadsData = {};
 if (fs.existsSync(DOWNLOADS_JSON)) {
     try {
         downloadsData = JSON.parse(fs.readFileSync(DOWNLOADS_JSON, "utf-8"));
         for (const videoId in downloadsData) {
             if (!downloadsData[videoId].filePath.startsWith(FILE_BASE_URL)) {
-                downloadsData[videoId].filePath = `${FILE_BASE_URL}${videoId}.webm`;
+                downloadsData[videoId].filePath = `${FILE_BASE_URL}${videoId}.mp3`;
             }
         }
         fs.writeFileSync(DOWNLOADS_JSON, JSON.stringify(downloadsData, null, 2));
@@ -44,7 +44,7 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
         }
 
         const videoIds = response.data.videos;
-        console.log(`📹 Found ${videoIds.length} videos. Checking which ones need downloading...`);
+        console.log(`📹 mujhe ${videoIds.length} videos mili h dekhta hu kitni bachi h`);
 
         for (const videoId of videoIds) {
             const filename = `${videoId}.webm`;
@@ -53,11 +53,11 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
 
             // Skip if already downloaded and valid
             if (downloadsData[videoId] && fs.existsSync(filePath) && downloadsData[videoId].size > 0) {
-                console.log(`⏭️ Skipping ${videoId}, already downloaded.`);
+                console.log(`⏭️ isko ${videoId}, Skip kar rha hu kyoki sahi h`);
                 continue;
             }
 
-            console.log(`🎵 Downloading: ${videoId}...`);
+            console.log(`🎵 kisa download kar rha hu samjha kya ${videoId}...`);
 
             let success = false;
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
@@ -69,11 +69,13 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                     const { url, filename: videoTitle } = downloadResponse.data;
 
                     if (!url) {
-                        throw new Error("❌ No URL returned for download.");
+                        throw new Error("phuck ho ga guru");
                     }
 
-                    // Clean filename (remove .mp3 extension if present)
-                    const title = videoTitle ? videoTitle.replace(/\.mp3$/, '').trim() : `Video ${videoId}`;
+                    // Clean up filename to use as title (remove .mp3 extension if present)
+                    const title = videoTitle 
+                        ? videoTitle.replace(/\.mp3$/, '').trim() 
+                        : `Video ${videoId}`;
 
                     // Download the audio file
                     const writer = fs.createWriteStream(filePath);
@@ -98,10 +100,10 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                         throw new Error("Downloaded file size is 0 bytes");
                     }
 
-                    console.log(`✅ Downloaded: ${filePath} (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
-                    console.log(`📝 Title: ${title}`);
+                    console.log(`✅ kaam ho gya guru ${filePath} (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
+                    console.log(`📝 Title from filename: ${title}`);
 
-                    // Save to downloads.json
+                    // Save to downloads.json with the filename as title
                     downloadsData[videoId] = {
                         title: title,
                         id: videoId,
@@ -116,7 +118,7 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                     success = true;
                     break;
                 } catch (err) {
-                    console.error(`⚠️ Error downloading ${videoId}: ${err.message}`);
+                    console.error(`⚠️ phuck ho gya guru ${videoId}: ${err.message}`);
                     if (attempt === MAX_RETRIES) {
                         console.error(`❌ Failed after ${MAX_RETRIES} attempts, skipping.`);
                     }
