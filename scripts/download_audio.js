@@ -2,20 +2,14 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
-const crypto = require('crypto');
 
 const MP3_API = "https://backendmix.vercel.app/mp3";
-const DOWNLOAD_API = "https://backendmix-emergeny.vercel.app/d";
-const CHANNEL_API = "https://backendmix.vercel.app/c";
+const CHANNEL_API = "https://backendmix-emergeny.vercel.app/list";
 const DOWNLOAD_DIR = path.join(__dirname, "..", "avas");
 const DOWNLOADS_JSON = path.join(__dirname, "..", "downloads.json");
 const MAX_RETRIES = 3;
-const CHANNEL_ID = "UCVIq229U5A54UVzHQJqZCPQ";
+const CHANNEL_ID = "UCVIq229U5A54UVzHQJqZCPQ"; // 🔥 Hardcoded Channel ID
 const FILE_BASE_URL = "https://channel-khaki.vercel.app/avas/";
-const RAPIDAPI_USERNAME = "BANK OF APIs";
-
-// Calculate MD5 hash of RapidAPI username
-const rapidApiMd5 = crypto.createHash('md5').update(RAPIDAPI_USERNAME).digest('hex');
 
 // Ensure the download directory exists
 if (!fs.existsSync(DOWNLOAD_DIR)) {
@@ -49,47 +43,47 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
             process.exit(1);
         }
 
-        const videoList = response.data.videos;
-        console.log(`📹 Found ${videoList.length} videos, processing...`);
+        const videoIds = response.data.videos;
+        console.log(`📹 mujhe ${videoIds.length} videos mili h dekhta hu kitni bachi h`);
 
-        for (const video of videoList) {
-            const videoId = video.id;
-            const filename = `${videoId}.webm`;
+        for (const videoId of videoIds) {
+            const filename = `${videoId}.mp3`;
             const filePath = path.join(DOWNLOAD_DIR, filename);
             const fileUrl = `${FILE_BASE_URL}${filename}`;
 
             // Skip if already downloaded and valid
             if (downloadsData[videoId] && fs.existsSync(filePath) && downloadsData[videoId].size > 0) {
-                console.log(`⏭️ Skipping ${videoId}, already downloaded.`);
+                console.log(`⏭️ isko ${videoId}, Skip kar rha hu kyoki sahi h`);
                 continue;
             }
 
-            console.log(`🎵 Downloading ${videoId}...`);
+            console.log(`🎵 kisa download kar rha hu samjha kya ${videoId}...`);
 
             let success = false;
             for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
                 try {
                     console.log(`🔄 Attempt ${attempt}/${MAX_RETRIES}...`);
 
-                    const downloadInfo = await axios.get(`${DOWNLOAD_API}/${videoId}`);
-                    const { link: url, title: videoTitle, filesize } = downloadInfo.data;
+                    // Get the download URL and filename from the MP3 API
+                    const downloadResponse = await axios.get(`${MP3_API}/${videoId}`);
+                    const { url, filename: videoTitle } = downloadResponse.data;
 
                     if (!url) {
-                        throw new Error("No download URL available");
+                        throw new Error("phuck ho ga guru");
                     }
 
-                    const title = videoTitle ? videoTitle.trim() : `Video ${videoId}`;
+                    // Clean up filename to use as title (remove .mp3 extension if present)
+                    const title = videoTitle 
+                        ? videoTitle.replace(/\.mp3$/, '').trim() 
+                        : `Video ${videoId}`;
 
+                    // Download the audio file
                     const writer = fs.createWriteStream(filePath);
                     const audioResponse = await axios({
                         url,
                         method: "GET",
                         responseType: "stream",
-                        timeout: 30000,
-                        headers: {
-                            'User-Agent': `Mozilla/5.0 ${RAPIDAPI_USERNAME}`,
-                            'X-RUN': rapidApiMd5
-                        }
+                        timeout: 30000
                     });
 
                     audioResponse.data.pipe(writer);
@@ -99,33 +93,34 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                         writer.on("error", reject);
                     });
 
-                    const downloadedSize = fs.statSync(filePath).size;
-                    if (downloadedSize === 0 || (filesize && downloadedSize < filesize * 0.9)) {
-                        throw new Error("Downloaded file size is incorrect or zero");
+                    // Get file size
+                    const fileSize = fs.statSync(filePath).size;
+
+                    if (fileSize === 0) {
+                        throw new Error("Downloaded file size is 0 bytes");
                     }
 
-                    console.log(`✅ Downloaded ${filePath} (${(downloadedSize / 1024 / 1024).toFixed(2)} MB)`);
-                    console.log(`📝 Title: ${title}`);
+                    console.log(`✅ kaam ho gya guru ${filePath} (${(fileSize / 1024 / 1024).toFixed(2)} MB)`);
+                    console.log(`📝 Title from filename: ${title}`);
 
+                    // Save to downloads.json with the filename as title
                     downloadsData[videoId] = {
                         title: title,
                         id: videoId,
                         filePath: fileUrl,
-                        size: downloadedSize
+                        size: fileSize
                     };
 
                     fs.writeFileSync(DOWNLOADS_JSON, JSON.stringify(downloadsData, null, 2));
 
+                    // Commit the file immediately
                     commitFile(filePath, videoId, title);
                     success = true;
                     break;
                 } catch (err) {
-                    console.error(`⚠️ Error downloading ${videoId}: ${err.message}`);
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                    }
+                    console.error(`⚠️ phuck ho gya guru ${videoId}: ${err.message}`);
                     if (attempt === MAX_RETRIES) {
-                        console.error(`❌ Skipping after ${MAX_RETRIES} failed attempts.`);
+                        console.error(`❌ Failed after ${MAX_RETRIES} attempts, skipping.`);
                     }
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 }
