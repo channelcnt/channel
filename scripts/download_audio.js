@@ -76,24 +76,17 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
                     console.log(`📥 Received download URL: ${url}`);
 
                     const title = videoTitle ? videoTitle.trim() : `Video ${videoId}`;
-                    const writer = fs.createWriteStream(filePath);
-                    const audioResponse = await axios({
-                        url,
-                        method: "GET",
-                        responseType: "stream",
-                        timeout: 30000,
+                    const response = await fetch(url, {
                         headers: {
                             'User-Agent': `Mozilla/5.0 ${RAPIDAPI_USERNAME}`,
                             'X-RUN': rapidApiMd5
                         }
                     });
-
-                    audioResponse.data.pipe(writer);
-
-                    await new Promise((resolve, reject) => {
-                        writer.on("finish", resolve);
-                        writer.on("error", reject);
-                    });
+                    if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+                    
+                    const blob = await response.blob();
+                    const buffer = await blob.arrayBuffer();
+                    fs.writeFileSync(filePath, Buffer.from(buffer));
 
                     const downloadedSize = fs.statSync(filePath).size;
                     if (downloadedSize === 0 || (filesize && downloadedSize < filesize * 0.9)) {
