@@ -46,7 +46,7 @@ if (fs.existsSync(DOWNLOADS_JSON)) {
             process.exit(1);
         }
 
-        const videoIds = response.data.videos;
+        const videoIds = response.data.videos.map(video => video.id);
         console.log(`📹 Found ${videoIds.length} videos. Checking downloads...`);
 
         for (const videoId of videoIds) {
